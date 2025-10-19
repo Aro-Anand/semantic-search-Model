@@ -1,0 +1,12 @@
+Flask
+flask-cors
+tensorflow
+tensorflow-hub
+faiss-cpu
+scikit-learn
+numpy
+requests
+python-dotenv
+gunicorn
+pytest
+boto3  # For AWS S3 (optional)

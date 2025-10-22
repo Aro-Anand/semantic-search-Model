@@ -44,7 +44,6 @@ api.log
 api.log
 
 # Models (large files - store separately)
-models/
 !models/.gitkeep
 
 # Data

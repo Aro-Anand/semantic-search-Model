@@ -1,12 +1,18 @@
-# app.py
+"""
+Franchise Search API v2.1 - Option 2 (Local + S3 Backup)
+"""
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
+import os, sys
 import time
 from datetime import datetime
 from functools import wraps
 from threading import Thread
-import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 from config import config
 from models.model_manager import ModelManager
@@ -20,12 +26,11 @@ logging.basicConfig(
     handlers=[
         logging.FileHandler('api.log'),
         logging.StreamHandler()
-    ],
-    encoding='utf-8'
+    ]
 )
 logger = logging.getLogger(__name__)
 
-# Initialize app
+# Initialize Flask
 app = Flask(__name__)
 CORS(app, origins=config.ALLOWED_ORIGINS)
 
@@ -80,7 +85,7 @@ def initialize_system():
     
     try:
         logger.info("="*70)
-        logger.info("FRANCHISE SEARCH API v2.1 - MODULAR WITH MODEL PERSISTENCE")
+        logger.info("FRANCHISE SEARCH API v2.1 - OPTION 2 (Local + S3 Backup)")
         logger.info("="*70)
         
         # 1. Load data
@@ -92,6 +97,7 @@ def initialize_system():
         
         if not models_loaded:
             # Train from scratch
+            logger.info("⚠ Models not found. Training from scratch...")
             texts = data_service.get_all_texts()
             model_manager.initialize_models(texts)
         
@@ -106,6 +112,7 @@ def initialize_system():
         logger.info(f"✓ Sectors: {len(data_service.metadata['sectors'])}")
         logger.info(f"✓ Tags: {len(data_service.metadata['tags'])}")
         logger.info(f"✓ Locations: {len(data_service.metadata['locations'])}")
+        logger.info(f"✓ S3 Backup: {'Enabled' if model_manager.s3_backup else 'Disabled'}")
         logger.info("="*70)
         
     except Exception as e:
@@ -120,6 +127,15 @@ def initialize_system():
 @error_handler
 def health():
     """System health check"""
+    s3_info = None
+    if model_manager.s3_backup and model_manager.s3_backup.is_available():
+        backups = model_manager.s3_backup.list_backups(limit=1)
+        s3_info = {
+            'bucket': config.S3_BUCKET,
+            'latest_backup': backups[0] if backups else None,
+            'total_backups': len(backups)
+        }
+    
     return jsonify({
         "status": "healthy" if system_ready else "initializing",
         "timestamp": datetime.utcnow().isoformat(),
@@ -134,6 +150,10 @@ def health():
             "sectors": len(data_service.metadata['sectors']),
             "tags": len(data_service.metadata['tags']),
             "locations": len(data_service.metadata['locations'])
+        },
+        "storage": {
+            "type": "Local + S3 Backup" if s3_info else "Local Only",
+            "s3_backup": s3_info
         }
     })
 
@@ -143,7 +163,7 @@ def health():
 @require_ready
 def search():
     """
-    Search franchises with hybrid search
+    Hybrid search - combines semantic + keyword
     
     Params: q (required), top_n, semantic_weight, sector, location, tags
     """
@@ -258,18 +278,75 @@ def retrain():
     """Manually trigger model retraining"""
     try:
         if data_service.has_changed():
-            logger.info("Data changed! Retraining...")
+            logger.info("🔄 Data changed! Retraining models...")
             texts = data_service.get_all_texts()
             model_manager.initialize_models(texts)
-            return jsonify({"status": "success", "message": "Retrained"})
+            
+            return jsonify({
+                "status": "success",
+                "message": "Models retrained successfully"
+            })
         else:
-            return jsonify({"status": "no_change", "message": "No data changes"})
+            return jsonify({
+                "status": "no_change",
+                "message": "No data changes detected"
+            })
     except Exception as e:
+        logger.error(f"Retrain failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ============================================================================
-# STARTUP
+# STORAGE MANAGEMENT ENDPOINTS (OPTIONAL)
 # ============================================================================
+
+@app.route('/api/admin/model-storage', methods=['GET'])
+@error_handler
+@require_ready
+def model_storage_info():
+    """Get model storage information"""
+    return jsonify(model_manager.get_storage_info())
+
+@app.route('/api/admin/model-backups', methods=['GET'])
+@error_handler
+@require_ready
+def list_backups():
+    """List available S3 backups"""
+    if not model_manager.s3_backup or not model_manager.s3_backup.is_available():
+        return jsonify({"error": "S3 backup not enabled"}), 400
+    
+    limit = int(request.args.get('limit', 10))
+    backups = model_manager.s3_backup.list_backups(limit=limit)
+    
+    return jsonify({
+        "backups": backups,
+        "total": len(backups)
+    })
+
+@app.route('/api/admin/restore-models', methods=['POST'])
+@error_handler
+def restore_from_backup():
+    """Restore models from S3 backup"""
+    if not model_manager.s3_backup or not model_manager.s3_backup.is_available():
+        return jsonify({"error": "S3 backup not enabled"}), 400
+    
+    try:
+        success = model_manager.s3_backup.restore_latest(config.MODELS_DIR)
+        
+        if success:
+            # Reload models
+            model_manager.load_models()
+            return jsonify({
+                "status": "success",
+                "message": "Models restored from S3 backup"
+            })
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Failed to restore models"
+            }), 500
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ============================================================================
 # AUTO-RETRAIN BACKGROUND WORKER
@@ -295,6 +372,10 @@ def start_auto_retrain():
     thread = Thread(target=check_loop, daemon=True)
     thread.start()
     logger.info(f"✓ Auto-retrain enabled (interval: {config.CHECK_INTERVAL}s)")
+
+# ============================================================================
+# STARTUP
+# ============================================================================
 
 if __name__ == '__main__':
     initialize_system()

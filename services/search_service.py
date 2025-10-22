@@ -1,4 +1,7 @@
-# services/search_service.py
+"""
+Search Service - Hybrid Search (Semantic + Keyword)
+"""
+
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from threading import Lock
@@ -7,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class SearchService:
-    """Core search functionality"""
+    """Hybrid search combining semantic and keyword search"""
     
     def __init__(self, model_manager, listings):
         self.model_manager = model_manager
@@ -85,7 +88,7 @@ class SearchService:
                 return []
     
     def get_recommendations(self, listing_id: int, top_n: int = 5, sector_filter: bool = True) -> list:
-        """Get similar franchises with optional sector filtering"""
+        """Get similar franchises"""
         idx = next((i for i, l in enumerate(self.listings) if l.get("id") == listing_id), None)
         if idx is None:
             raise ValueError(f"Listing ID {listing_id} not found")
@@ -96,7 +99,6 @@ class SearchService:
                     self.model_manager.embeddings[idx].reshape(1, -1), top_n + 10
                 )
             
-            # Filter results
             base_listing = self.listings[idx]
             results = []
             

@@ -1,4 +1,7 @@
-# services/data_service.py
+"""
+Data Service - Data Loading & Management
+"""
+
 import json
 import hashlib
 import logging
@@ -38,6 +41,7 @@ class DataService:
             self._extract_metadata()
             
             logger.info(f"✓ Loaded {len(self.listings)} listings")
+            logger.info(f"  - {len(self.metadata['sectors'])} sectors, {len(self.metadata['tags'])} tags, {len(self.metadata['locations'])} locations")
             return True
             
         except Exception as e:
@@ -45,7 +49,7 @@ class DataService:
             return False
     
     def _update_hash(self):
-        """Calculate data file hash"""
+        """Calculate data file hash for change detection"""
         try:
             with open(self.data_path, 'rb') as f:
                 self.data_hash = hashlib.md5(f.read()).hexdigest()

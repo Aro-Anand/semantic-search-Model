@@ -5,7 +5,7 @@ Option 2: Local EBS + S3 Backup
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass
 class Config:
@@ -15,8 +15,7 @@ class Config:
     PORT: int = int(os.getenv('PORT', 5000))
     
     # ============ CORS Configuration ============
-    ALLOWED_ORIGINS: list = os.getenv('ALLOWED_ORIGINS', '*').split(',')
-    
+    ALLOWED_ORIGINS: list = field(default_factory=list)    
     # ============ ML Models Configuration ============
     USE_EMBEDDINGS_PATH: str = os.getenv('USE_EMBEDDINGS_PATH', 
         'https://tfhub.dev/google/universal-sentence-encoder/4')

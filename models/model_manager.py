@@ -152,7 +152,7 @@ class ModelManager:
                     min_df=1
                 )
                 self.tfidf_vectorizer.fit(texts)
-                logger.info(f"    ✓ Features: {self.tfidf_vectorizer.n_features_}")
+                logger.info(f"    ✓ Features: {self.tfidf_vectorizer.max_features}")
                 
                 # 5. Save models locally
                 self._save_models_locally(texts)

@@ -1,83 +1,148 @@
-# 🔍 Franchise Search API v2.1
+## Franchise Semantic Search (GCS + Local fallback)
 
-A powerful machine learning-powered API for intelligent franchise search and recommendations using hybrid search (semantic + keyword matching).
+This project is a Flask API that supports **hybrid search** (semantic + keyword) over franchise listings.
 
-## 📋 Table of Contents
+Key tech:
+- **Universal Sentence Encoder (USE)** for embeddings
+- **FAISS** for semantic similarity search
+- **TF‑IDF** for keyword matching
+- Optional model persistence via **Google Cloud Storage (GCS)**
 
-- [Overview](#overview)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Running the Application](#running-the-application)
-- [API Endpoints](#api-endpoints)
-- [Storage Options](#storage-options)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Monitoring](#monitoring)
-- [Troubleshooting](#troubleshooting)
+### Architecture (high level)
 
-## 🎯 Overview
+```mermaid
+flowchart TD
+  Client[Client] -->|HTTP| FlaskAPI[FlaskAPI]
 
-This API provides intelligent search and recommendation capabilities for franchise opportunities using:
-- **Universal Sentence Encoder (USE)** for semantic understanding
-- **TF-IDF** for keyword matching
-- **FAISS** for efficient vector similarity search
-- **Hybrid scoring** combining semantic and keyword approaches
+  subgraph apiLayer[APILayer]
+    FlaskAPI --> Routes[Routes]
+  end
 
-## ✨ Features
+  subgraph servicesLayer[Services]
+    Routes --> DataService[DataService]
+    Routes --> SearchService[SearchService]
+    Routes --> ModelManager[ModelManager]
+  end
 
-### Core Functionality
-- **Hybrid Search**: Combines semantic and keyword search with configurable weights
-- **Smart Recommendations**: Find similar franchises based on sector and characteristics
-- **Autocomplete**: Real-time search suggestions
-- **Advanced Filtering**: Filter by sector, location, tags, and investment range
-- **Pagination**: Efficient data loading with offset/limit support
+  DataService --> DatasetFile[dataset.json]
 
-### ML Capabilities
-- Semantic search using Google's Universal Sentence Encoder
-- Fast vector similarity search with FAISS indexing
-- TF-IDF keyword matching
-- Automatic model training and retraining
+  ModelManager -->|load_models| LocalModels[LocalModelsDir]
+  ModelManager -->|download_models| GCSBucket[GCSBucket]
+  ModelManager -->|initialize_models| TrainFromScratch[TrainFromScratch]
 
-### System Features
-- Auto-retrain on data changes
-- Optional S3 backup for model persistence
-- Health monitoring endpoints
-- CORS support for web applications
-- Thread-safe operations
-- Comprehensive error handling
-
-## 🏗️ Architecture
-
+  SearchService -->|uses| ModelsInMemory[ModelsInMemory]
+  ModelManager --> ModelsInMemory
 ```
-├── app.py                          # Main Flask application
-├── config.py                       # Configuration management
-├── requirements.txt                # Python dependencies
-├── Dockerfile                      # Docker configuration
-├── compose.yaml                    # Docker Compose setup
-├── dataset.json                    # Franchise data (not included)
-├── index.html                      # Web UI demo
-│
-├── models/                         # ML models (auto-generated)
-│   ├── model_manager.py           # Model lifecycle management
-│   ├── use_model/                 # USE embeddings cache
-│   ├── tfidf_model.pkl            # TF-IDF vectorizer
-│   ├── faiss_index.bin            # FAISS index
-│   ├── embeddings.npy             # Precomputed embeddings
-│   └── metadata.json              # Model metadata
-│
-├── services/                       # Business logic
-│   ├── data_service.py            # Data loading & management
-│   ├── search_service.py          # Search implementation
-│   └── s3_backup_service.py       # S3 backup (optional)
-│
-└── tests/                          # Test suite
-    ├── test_api.py                # API endpoint tests
-    ├── test_service.py            # Service layer tests
-    └── example_usage.py           # Usage examples
+
+## Project structure
+
+Important paths:
+- `DEOPLOYMENT/backend/main.py`: Flask app entrypoint
+- `DEOPLOYMENT/backend/src/api/routes.py`: API endpoints
+- `DEOPLOYMENT/backend/src/models/model_manager.py`: model load/train/save logic
+- `DEOPLOYMENT/backend/src/services/data_service.py`: dataset load + add/update/delete + persistence
+- `DEOPLOYMENT/dataset.json`: franchise listings
+- `DEOPLOYMENT/models/`: model artifacts (tfidf/faiss/metadata)
+
+## Running locally
+
+From `DEOPLOYMENT/backend/`:
+
+```bash
+python -m pip install -r requirements.txt
+python main.py
 ```
+
+API will be on `http://localhost:8080`.
+
+## Model load lifecycle (required behavior)
+
+On startup (`backend/main.py`):
+- **First**: check **GCS** for model files and download if present
+- **Then**: check **local** model files
+- **Finally**: if neither exists, **train from scratch** and save locally (and upload to GCS if enabled)
+
+## Adding new franchise listings
+
+### Endpoint (alias)
+- `POST /api/add/listings`
+
+### Admin endpoint (secured)
+- `POST /api/admin/listings` with header `X-Admin-API-Key: <ADMIN_API_KEY>`
+
+### Payload format
+
+Send a JSON object (single listing). Required fields:
+- `title` (string)
+- `sector` (string)
+
+Optional fields:
+- `description`, `investment_range`, `location`, `tags` (array of strings), and any extra fields (stored as-is).
+
+Example:
+
+```json
+{
+  "title": "My New Franchise",
+  "sector": "Food & Beverage",
+  "description": "Fast-growing concept...",
+  "investment_range": "$100k-$200k",
+  "location": "Chennai",
+  "tags": ["food", "quick-service"]
+}
+```
+
+### What happens on add?
+- The API **appends** the listing to `DEOPLOYMENT/dataset.json`
+- It **updates in-memory listings** and refreshes TF‑IDF matrix for keyword search
+- It returns `retrain_required: true`
+- **It does NOT retrain models automatically** (per current strategy)
+
+### How to retrain models manually
+- `POST /api/admin/retrain`
+
+Notes:
+- This retrains FAISS embeddings + TF‑IDF vectorizer from the full dataset and saves model files under `DEOPLOYMENT/models/`.
+- If GCS is enabled and available, model artifacts are uploaded to GCS as well.
+
+## Configuration (env vars)
+
+Backend reads environment variables (see `DEOPLOYMENT/backend/src/core/config.py`):
+- `PORT` (default `8080`)
+- `STORAGE_TYPE` (`local` or `gcs`)
+- `GCS_BUCKET`, `GCP_PROJECT`
+- `ADMIN_API_KEY` (required to use `/api/admin/*`)
+- `DATA_PATH` (default `/app/dataset.json` in Docker)
+
+## Test scripts (simple to run)
+
+### Local (no HTTP)
+```bash
+python DEOPLOYMENT/backend/scripts/smoke_local.py
+```
+
+### HTTP (API must be running)
+```bash
+python DEOPLOYMENT/backend/scripts/smoke_http.py --url http://localhost:8080 --admin-key <ADMIN_API_KEY>
+```
+
+### Full API test script
+```bash
+python DEOPLOYMENT/tests/test_api.py --url http://localhost:8080 --admin-key <ADMIN_API_KEY>
+```
+
+## Docker
+
+Build from `DEOPLOYMENT/` directory (Dockerfile is `DEOPLOYMENT/Dockerfile`):
+
+```bash
+docker build -t semantic-search-api .
+docker run -p 8080:8080 -e ADMIN_API_KEY=change-me semantic-search-api
+```
+
+## Important note about Cloud Run / containers
+
+If you deploy to environments with **ephemeral disk** (like Cloud Run), writing `dataset.json` inside the container is **not durable** across instance restarts.\nIf you need durable “add listing” in Cloud Run, move dataset persistence to a durable store (e.g. a GCS object, Firestore, or Cloud SQL).
 
 ## 📦 Prerequisites
 

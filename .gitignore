@@ -7,6 +7,8 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+frontend/
+tests/
 downloads/
 eggs/
 .eggs/
@@ -42,21 +44,25 @@ api.log
 # Logs
 *.log
 api.log
-
+Credentials.json
 # Models (large files - store separately)
 !models/.gitkeep
-
+sigma-archery-467104-d5-ee908bc069c2.json
 # Data
 dataset.json
 *.pkl
 *.npy
 *.bin
-
+test_GCS.py
 # OS
 .DS_Store
 Thumbs.db
-
+faiss_index.bin
+tfidf_model.pkl
+embeddings.npy
+metadata.json
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+tests/test_api.py

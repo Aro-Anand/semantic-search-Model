@@ -8,5 +8,4 @@ numpy
 requests
 python-dotenv
 gunicorn
-pytest
-boto3  # For AWS S3 (optional)
+google-cloud-storage

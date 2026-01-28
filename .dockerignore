@@ -1,34 +1,84 @@
-# Include any files or directories that you don't want to be copied to your
-# container here (e.g., local build artifacts, temporary files, etc.).
-#
-# For more help, visit the .dockerignore file reference guide at
-# https://docs.docker.com/go/build-context-dockerignore/
+# Git
+.git
+.gitignore
+.gitattributes
 
-**/.DS_Store
-**/__pycache__
-**/.venv
-**/.classpath
-**/.dockerignore
-**/.env
-**/.git
-**/.gitignore
-**/.project
-**/.settings
-**/.toolstarget
-**/.vs
-**/.vscode
-**/*.*proj.user
-**/*.dbmdl
-**/*.jfm
-**/bin
-**/charts
-**/docker-compose*
-**/compose.y*ml
-**/Dockerfile*
-**/node_modules
-**/npm-debug.log
-**/obj
-**/secrets.dev.yaml
-**/values.dev.yaml
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+*.md
+docs/
+DOCS/
 LICENSE
 README.md
+GCP_DEPLOYMENT_GUIDE.md
+DEPLOYMENT_COMPARISON.md
+QUICK_REFERENCE.md
+
+# Scripts (not needed in container)
+*.sh
+verify_setup.sh
+deploy_cloud_run.sh
+upload_models.sh
+train_models.py
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+api.log
+
+# Testing
+tests/
+.pytest_cache/
+test_*.py
+
+# Large model files (downloaded from GCS at runtime)
+# Uncomment if models are large and in GCS
+# models/*.pkl
+# models/*.bin
+# models/*.npy
+test_GCS.py
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS
+Thumbs.db
+.DS_Store

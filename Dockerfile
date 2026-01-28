@@ -1,51 +1,57 @@
-# syntax=docker/dockerfile:1
+# Use Python 3.12 slim image (matches backend/pyproject requires-python)
+FROM python:3.12-slim
 
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Dockerfile reference guide at
-# https://docs.docker.com/go/dockerfile-reference/
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive
 
-# Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
-
-ARG PYTHON_VERSION=3.12.7
-FROM python:${PYTHON_VERSION}-slim as base
-
-# Prevents Python from writing pyc files.
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Keeps Python from buffering stdout and stderr to avoid situations where
-# the application crashes without emitting any logs due to buffering.
-ENV PYTHONUNBUFFERED=1
-
+# Set working directory
 WORKDIR /app
 
-# Create a non-privileged user that the app will run under.
-# See https://docs.docker.com/go/dockerfile-user-best-practices/
-ARG UID=10001
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}" \
-    appuser
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Download dependencies as a separate step to take advantage of Docker's caching.
-# Leverage a cache mount to /root/.cache/pip to speed up subsequent builds.
-# Leverage a bind mount to requirements.txt to avoid having to copy them into
-# into this layer.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=bind,source=requirements.txt,target=requirements.txt \
-    python -m pip install -r requirements.txt
+# Copy backend requirements first (for Docker layer caching)
+COPY backend/requirements.txt ./requirements.txt
 
-# Switch to the non-privileged user to run the application.
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+# Layout:
+# /app/backend  -> python package + main entrypoint
+# /app/dataset.json, /app/models -> data + optional model artifacts
+COPY backend/ ./backend/
+COPY dataset.json ./dataset.json
+COPY models/ ./models/
+
+# Create temp directory for models (Cloud Run ephemeral storage)
+RUN mkdir -p /tmp/models
+
+RUN python -c "import tensorflow_hub as hub; print('Downloading USE model...'); hub.load('https://tfhub.dev/google/universal-sentence-encoder/4'); print('USE model cached!')"
+
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app /tmp/models
+
+# Switch to non-root user
 USER appuser
 
-# Copy the source code into the container.
-COPY . .
+# Expose port 8080 (Cloud Run uses this by default)
+EXPOSE 8080
 
-# Expose the port that the application listens on.
-EXPOSE 5000
+# Health check (optional, but good practice)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/api/health || exit 1
 
-# Run the application.
-CMD 5000
+# Run with gunicorn (production-ready WSGI server)
+# Workers=1 to avoid memory issues, threads=4 for concurrency
+# Timeout=300 (5 min) for model loading on cold starts
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "300", "--preload", "backend.main:app"]

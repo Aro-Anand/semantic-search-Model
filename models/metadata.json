@@ -1,5 +1,7 @@
 {
   "num_texts": 207,
-  "saved_at": "2025-10-22 13:31:53.777243",
-  "s3_backup_enabled": false
+  "saved_at": "2026-01-25T18:58:28.170624+00:00",
+  "storage_type": "local",
+  "deployment_env": "development",
+  "gcs_bucket": null
 }

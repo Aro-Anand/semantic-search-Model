@@ -120,3 +120,52 @@ export async function checkHealth() {
 
     return await response.json();
 }
+
+/**
+ * Add a new franchise listing.
+ * 
+ * @param {Object} listing - The listing data
+ * @returns {Promise<Object>} Promise resolving to the created listing
+ */
+export async function addListing(listing) {
+    const url = `${API_BASE_URL}/add/listings`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(listing),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `Failed to add listing: ${response.statusText}`);
+    }
+
+    return await response.json();
+}
+
+/**
+ * Trigger model retraining.
+ * 
+ * @returns {Promise<Object>} Promise resolving to the retrain status
+ */
+export async function retrainModel() {
+    // Note: This endpoint might fail on Cloud Run but works on EC2/Local
+    const url = `${API_BASE_URL}/admin/retrain`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: '{}',
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `Retrain failed: ${response.statusText}`);
+    }
+
+    return await response.json();
+}
+
